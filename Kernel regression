@@ -1,0 +1,220 @@
+from __future__ import division
+import numpy as np
+import utilities as utils
+import time
+import random
+from scipy.cluster.vq import kmeans
+
+class Classifier:
+    def __init__( self, params=None ):
+        """ Params can contain any useful parameters for the algorithm """
+        
+    def learn(self, Xtrain, ytrain):
+        """ Learns using the traindata """
+        
+    def predict(self, Xtest):
+        probs = np.random.rand(Xtest.shape[0])
+        ytest = utils.threshold_probs(probs)
+        return ytest
+   
+########################################################################                        
+#LinearRegressionClass
+########################################################################                        
+
+class LinearRegressionClass(Classifier):
+    def __init__( self, params=None ):
+        self.weights = None
+        if params is not None and 'regwgt' in params:
+            self.regwgt = params['regwgt']
+        else:
+            self.regwgt = 0.01
+        self.tli = time.time()   
+                
+    def learn(self, Xtrain, ytrain):
+        yt = np.copy(ytrain)
+        yt[yt == 0] = -1
+        numsamples = Xtrain.shape[0]
+        self.weights = np.dot(np.dot(np.linalg.inv(np.add(np.dot(Xtrain.T,Xtrain)/numsamples,self.regwgt*np.identity(Xtrain.shape[1]))), Xtrain.T),yt)/numsamples
+        
+    def predict(self, Xtest):
+        ytest = np.dot(Xtest, self.weights)
+        ytest[ytest > 0] = 1     
+        ytest[ytest < 0] = 0
+        print("Linear Regression:"),
+        print time.time() - self.tli
+        return ytest  
+
+########################################################################   
+#Kernel LR
+########################################################################   
+
+class KernelLR(Classifier):
+    def __init__( self, k, params=None):
+        self.weights = None
+        if params is not None and 'regwgt' in params:
+            self.regwgt = params['regwgt']
+        else:
+            self.regwgt = 0.01
+        self.tklr = time.time()
+        self.k = k
+        self.centres = []
+        
+    def learn(self, xtrain, ytrain):
+        yt = np.copy(ytrain)
+        yt[yt == 0] = -1
+        
+      #randomly select k equidistant rows
+        #each = xtrain.shape[0]/40
+        #for i in range(0,self.k):
+        #    self.centres.append(xtrain[int(i * each)])
+        
+      #select k rows using kmeans
+        self.centres = kmeans(xtrain, self.k)
+        self.centres = np.asmatrix(self.centres[0])
+        self.centres = np.array(self.centres)
+
+        Ktrain = []
+        for i in range(xtrain.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                krow.append(np.dot(xtrain[i],self.centres[j].T)+1)
+            Ktrain.append(krow)        
+        Ktrain = np.array(Ktrain)
+        numsamples = xtrain.shape[0]
+        self.weights = np.dot(np.dot(np.linalg.inv(np.add(np.dot(Ktrain.T,Ktrain)/numsamples,self.regwgt*np.identity(Ktrain.shape[1]))), Ktrain.T),yt)/numsamples
+        
+        
+    def predict(self, testset):
+        Ktest = []
+        for i in range(testset.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                krow.append(np.dot(testset[i],self.centres[j].T)+1)
+            Ktest.append(krow)
+    
+        ytest = np.dot(Ktest, self.weights)
+        ytest[ytest > 0] = 1
+        ytest[ytest < 0] = 0
+        
+        print("Kernel LR:"),
+        print time.time() - self.tklr
+        return ytest
+
+########################################################################   
+#GaussianKernel
+########################################################################   
+
+class GaussianKernel(Classifier):
+    def __init__( self, k, s, params=None):
+        self.weights = None
+        if params is not None and 'regwgt' in params:
+            self.regwgt = params['regwgt']
+        else:
+            self.regwgt = 0.01
+        self.tgk = time.time()
+        self.k = k
+        self.centres = []
+        self.sigma = s
+
+    def learn(self, xtrain, ytrain):
+        yt = np.copy(ytrain)
+        yt[yt == 0] = -1
+        
+        #randomly select k equidistant rows
+        #each = xtrain.shape[0]/40
+        #for i in range(0,self.k):
+        #    self.centres.append(xtrain[int(i * each)])
+        
+        #select k rows using kmeans
+        self.centres = kmeans(xtrain, self.k)
+        self.centres = np.asmatrix(self.centres[0])
+        self.centres = np.array(self.centres)
+
+        Ktrain = []
+        for i in range(xtrain.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                xscal = np.dot((xtrain[i]-self.centres[j]).T, (xtrain[i]-self.centres[j])) #scalar
+                krow.append(np.exp(-xscal/(2*self.sigma**2)))
+            Ktrain.append(krow)        
+        Ktrain = np.array(Ktrain)
+        numsamples = xtrain.shape[0]
+        self.weights = np.dot(np.dot(np.linalg.inv(np.add(np.dot(Ktrain.T,Ktrain)/numsamples,self.regwgt*np.identity(Ktrain.shape[1]))), Ktrain.T),yt)/numsamples
+        
+    def predict(self, Xtest):
+        Ktest = []
+        for i in range(Xtest.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                xscal = np.dot((Xtest[i]-self.centres[j]).T, (Xtest[i]-self.centres[j])) #scalar
+                krow.append(np.exp(-xscal/(2*self.sigma**2)))
+            Ktest.append(krow)        
+        Ktest = np.array(Ktest) #800x15
+        
+        ytest = np.dot(Ktest, self.weights)
+        ytest[ytest > 0] = 1
+        ytest[ytest < 0] = 0
+        
+        print("Gaussian Kernel:"),
+        print time.time() - self.tgk
+        return ytest        
+        
+########################################################################   
+#Exponential Kernel
+########################################################################   
+
+class ExponentialKernel(Classifier):
+    def __init__( self, k, s, params=None):
+        self.weights = None
+        if params is not None and 'regwgt' in params:
+            self.regwgt = params['regwgt']
+        else:
+            self.regwgt = 0.01
+        self.tek = time.time()
+        self.k = k
+        self.centres = []
+        self.sigma = s
+
+    def learn(self, xtrain, ytrain):
+        yt = np.copy(ytrain)
+        yt[yt == 0] = -1
+        
+        #randomly select k equidistant rows
+        #each = xtrain.shape[0]/40
+        #for i in range(0,self.k):
+        #    self.centres.append(xtrain[int(i * each)])
+        
+        #select k rows using kmeans
+        self.centres = kmeans(xtrain, self.k)
+        self.centres = np.asmatrix(self.centres[0])
+        self.centres = np.array(self.centres)
+
+        Ktrain = []
+        for i in range(xtrain.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                xdiff = sum(np.absolute(xtrain[i]-self.centres[j])) #9
+                krow.append(np.exp(-xdiff/(2*self.sigma**2)))
+            Ktrain.append(krow)        
+        Ktrain = np.array(Ktrain)
+        numsamples = xtrain.shape[0]
+        self.weights = np.dot(np.dot(np.linalg.inv(np.add(np.dot(Ktrain.T,Ktrain)/numsamples,self.regwgt*np.identity(Ktrain.shape[1]))), Ktrain.T),yt)/numsamples
+        
+    def predict(self, Xtest):
+        Ktest = []
+        for i in range(Xtest.shape[0]):
+            krow = []
+            for j in range(self.centres.shape[0]):
+                xdiff = sum(np.absolute(Xtest[i]-self.centres[j])) #9
+                krow.append(np.exp(-xdiff/(2*self.sigma**2)))
+            Ktest.append(krow)        
+        Ktest = np.array(Ktest) #800x15
+        
+        ytest = np.dot(Ktest, self.weights)
+        ytest[ytest > 0] = 1
+        ytest[ytest < 0] = 0
+ 
+        print("Exponential Kernel:"),
+        print time.time() - self.tek
+        return ytest        
+ 
